@@ -217,3 +217,7 @@ Se tudo estiver funcionado perfeitamente, é so enviar as mensagens para o servi
 ![dado recebido](./assets/funciona-pspd.jpeg)
 
 O comando minikube dashboard irá abrir uma dashboard no navegador que você pode analisar e testar a performance.
+
+Complemento de:
+
+https://github.com/senaarth/k8s_game_of_life
