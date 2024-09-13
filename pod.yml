@@ -1,0 +1,293 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client
+  template:
+    metadata:
+      labels:
+        app: client
+    spec:
+      containers:
+        - name: client
+          image: yukioz/client-pspd
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client
+spec:
+  selector:
+    app: client
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30197
+  type: NodePort
+
+---
+
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: quickstart
+spec:
+  version: 7.6.2
+  nodeSets:
+  - name: default
+    count: 2
+    config:
+      node.master: true
+      node.data: true
+      node.ingest: true
+      node.store.allow_mmap: false
+
+---
+
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: quickstart
+spec:
+  version: 8.15.1
+  count: 1
+  elasticsearchRef:
+    name: quickstart
+  http:
+    service:
+        spec:
+            type: LoadBalancer
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jogodavida-mpi
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: jogodavida-mpi 
+  template:
+    metadata:
+      labels:
+        app: jogodavida-mpi
+    spec:
+      containers:
+        - name: mpi-container
+          image: lcsandrade/jogodavida-mpi # mpi-pspd
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 30004
+          command: ["mpirun", "-np", "4", "/app/jogo_da_vida_mpi"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jogodavida-mpi
+spec:
+  selector:
+    app: jogodavida-mpi
+  ports:
+    - name: tcp-port-30004  # Porta TCP
+      protocol: TCP
+      port: 30004
+      targetPort: 30004
+      nodePort: 30004
+  type: LoadBalancer
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jogodavida-omp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jogodavida-omp 
+  template:
+    metadata:
+      labels:
+        app: jogodavida-omp
+    spec:
+      containers:
+      - name: openmp-container
+        image: lcsandrade/jogodavida-omp # omp-pspd
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 30005
+        command: ["/app/jogo_da_vida_omp"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jogodavida-omp
+spec:
+  selector:
+    app: jogodavida-omp
+  ports:
+    - name: tcp-port-30005  # Porta TCP
+      protocol: TCP
+      port: 30005
+      targetPort: 30005
+      nodePort: 30005
+  type: LoadBalancer
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: socket-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: socket-server
+  template:
+    metadata:
+      labels:
+        app: socket-server
+    spec:
+      containers:
+      - name: socket-server-container
+        image: yukioz/socket-pspd 
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 30001  # TCP
+        - containerPort: 30002  # UDP
+          protocol: UDP
+        - containerPort: 30003  # WebSocket
+        env:
+        - name: ENV_VAR_EXAMPLE
+          value: "example"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: udp-services
+  namespace: ingress-nginx
+data:
+  30002: "default/socket-server:30002"  # Porta UDP mapeada para o serviço
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: socket-server
+spec:
+  loadBalancerIP: 104.154.205.216 # IP estático reservado
+  selector:
+    app: socket-server
+  ports:
+    - name: tcp-port-30001  # Porta TCP
+      protocol: TCP
+      port: 30001
+      targetPort: 30001
+    - name: websocket-port-30003  # Porta WebSocket
+      protocol: TCP
+      port: 30003
+      targetPort: 30003
+  type: NodePort
+
+---
+
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  name: jogodavida-spark-job
+spec:
+  type: Scala
+  mode: cluster
+  image: lcsandrade/jogodavida-spark
+  imagePullPolicy: Always
+  mainClass: JogoDaVidaSpark
+  mainApplicationFile: "local:///opt/spark/jars/jogodavida.jar"
+  sparkVersion: "3.4.0"
+  restartPolicy:
+    type: Never
+  sparkConf:
+    "spark.executor.instances": "2"
+    "spark.kubernetes.container.image.pullPolicy": "Always"
+  driver:
+    cores: 1
+    coreLimit: "1200m"
+    memory: "512m"
+    labels:
+      version: 3.4.0
+    serviceAccount: spark
+    podName: jogodavida-spark-driver
+  executor:
+    cores: 1
+    instances: 2
+    memory: "512m"
+    labels:
+      version: 3.4.0
+
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: spark-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "watch", "list", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps"]
+    verbs: ["get", "watch", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spark-role-binding
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: spark
+    namespace: default
+roleRef:
+  kind: Role
+  name: spark-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: jogodavida-spark-driver-service
+  namespace: default
+spec:
+  type: LoadBalancer  # Use LoadBalancer se estiver na nuvem e quiser expor externamente
+  selector:
+    spark-role: driver
+  ports:
+    - protocol: TCP
+      port: 30006
+      targetPort: 30006
+      nodePort: 30006  # Opcional, apenas para exposição externa

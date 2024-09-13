@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jogodavida-omp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: jogodavida-omp 
+  template:
+    metadata:
+      labels:
+        app: jogodavida-omp
+    spec:
+      containers:
+      - name: openmp-container
+        image: gcr.io/massive-hub-431500-n1/jogodavida-omp
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 30005
+        command: ["/app/jogo_da_vida_omp"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jogodavida-omp
+spec:
+  selector:
+    app: jogodavida-omp
+  ports:
+    - name: tcp-port-30005  # Porta TCP
+      protocol: TCP
+      port: 30005
+      targetPort: 30005
+      nodePort: 30005
+  type: LoadBalancer

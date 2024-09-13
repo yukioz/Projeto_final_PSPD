@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: socket-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: socket-server
+  template:
+    metadata:
+      labels:
+        app: socket-server
+    spec:
+      containers:
+      - name: socket-server-container
+        image: gcr.io/massive-hub-431500-n1/socket-server 
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 30001  # TCP
+        - containerPort: 30002  # UDP
+          protocol: UDP
+        - containerPort: 30003  # WebSocket
+        env:
+        - name: ENV_VAR_EXAMPLE
+          value: "example"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: udp-services
+  namespace: ingress-nginx
+data:
+  30002: "default/socket-server:30002"  # Porta UDP mapeada para o serviço
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: socket-server
+spec:
+  loadBalancerIP: 104.154.205.216 # IP estático reservado
+  selector:
+    app: socket-server
+  ports:
+    - name: tcp-port-30001  # Porta TCP
+      protocol: TCP
+      port: 30001
+      targetPort: 30001
+      nodePort: 30001
+    - name: websocket-port-30003  # Porta WebSocket
+      protocol: TCP
+      port: 30003
+      targetPort: 30003
+      nodePort: 30003
+  type: LoadBalancer

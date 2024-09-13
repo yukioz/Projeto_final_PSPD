@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jogodavida-mpi
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: jogodavida-mpi 
+  template:
+    metadata:
+      labels:
+        app: jogodavida-mpi
+    spec:
+      containers:
+        - name: mpi-container
+          image: gcr.io/massive-hub-431500-n1/jogodavida-mpi
+          imagePullPolicy: Always
+          ports:
+          - containerPort: 30004
+          command: ["mpirun", "-np", "4", "/app/jogo_da_vida_mpi"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jogodavida-mpi
+spec:
+  selector:
+    app: jogodavida-mpi
+  ports:
+    - name: tcp-port-30004  # Porta TCP
+      protocol: TCP
+      port: 30004
+      targetPort: 30004
+      nodePort: 30004
+  type: LoadBalancer

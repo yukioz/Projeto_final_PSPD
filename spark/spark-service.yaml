@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jogodavida-spark-driver-service
+spec:
+  type: LoadBalancer  # Use LoadBalancer se estiver na nuvem e quiser expor externamente
+  selector:
+    spark-role: driver
+  ports:
+    - protocol: TCP
+      port: 30006
+      targetPort: 30006
+      nodePort: 30006  # Opcional, apenas para exposição externa
